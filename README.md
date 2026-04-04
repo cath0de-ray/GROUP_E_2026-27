@@ -1,4 +1,4 @@
-# Project VITALIS: AI-Driven Acoustic Triage Node
+# Project VITALIS: AI-Driven Stethoscope Attachment
 **An Edge-AI Stethoscope Attachment for Rapid Pulmonary Diagnostics**
 
 ![Project Status](https://img.shields.io/badge/Status-Prototype_Development-blue)
@@ -39,11 +39,11 @@ This project is purpose-built to address the "Last Mile" healthcare gap, activel
 ## ⚙️ System Architecture & Workflow
 VITALIS operates on a completely localized, closed-loop pipeline ensuring 100% patient data privacy.
 
-1. **Acoustic Coupling:** Analog lung sounds are captured via the stethoscope chest-piece and routed through a custom 3D-printed/PVC T-junction.
+1. **Acoustic Coupling:** Analog lung sounds are captured via the stethoscope chest-piece and routed through a T-junction.
 2. **Digital Conversion:** The **INMP441 I2S MEMS Microphone** samples the audio at high fidelity, converting acoustic waves into digital I2S data streams.
 3. **DSP & Feature Extraction:** The **ESP32** buffers the audio in 1000ms windows and calculates Mel Frequency Cepstral Coefficients (MFCC) to isolate the acoustic "fingerprints" of the breath.
 4. **AI Inference:** The extracted features are fed into the quantized TensorFlow Lite / Keras neural network.
-5. **Output UI:** The predicted respiratory state is immediately displayed on the **0.96" I2C OLED**, providing clear triage instructions to the operator.
+5. **Output UI:** The predicted respiratory state is immediately displayed on the **OLED**, providing predictions to operator and patient.
 
 ---
 
@@ -52,7 +52,7 @@ The core inference engine was trained via Edge Impulse on a clinically verified 
 
 ### Validation Metrics
 * **Overall Accuracy:** 80.7%
-* **Normal Lung Precision:** 96.2%
+* **Overall F1 Score:** 0.80
 * **Training Depth:** 600 Epochs
 * **Optimization:** Quantized (int8) to operate within the 320KB RAM constraints of the ESP32.
 
@@ -62,7 +62,7 @@ The core inference engine was trained via Edge Impulse on a clinically verified 
 
 ---
 
-## 🛠️ Hardware Bill of Materials (BOM)
+## 🛠️ Hardware
 * **Microcontroller:** ESP32 DevKit V1 (38-pin Type-C, Xtensa LX6 @ 240MHz)
 * **Acoustic Sensor:** INMP441 I2S Digital MEMS Microphone
 * **Display Interface:** 0.96" I2C OLED (SSD1306)
