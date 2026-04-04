@@ -7,10 +7,9 @@
 ![License](https://img.shields.io/badge/License-CC_BY--NC--SA_4.0-lightgrey)
 
 ## 👥 Development Team
-* **Pradhumya Singh Yadav** (Lead Developer & AI Architect)
-* **Dhairya Chaudhary** (Research & Clinical Documentation)
-* **Aryan Chauhan** (Hardware Integration)
-
+* **Pradhumya Singh Yadav**
+* **Dhairya Chaudhary**
+* **Aryan Chauhan**
 ---
 
 ## 🩺 Executive Summary
