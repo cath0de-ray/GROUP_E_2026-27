@@ -2,7 +2,12 @@
 #include "driver/i2s_std.h"
 #include <VITALIS_Triage_inferencing.h>
 
-// ===== MIC PINS =====
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
+
+// ================= MIC =================
 #define I2S_BCLK 2
 #define I2S_WS   21
 #define I2S_DIN  16
@@ -16,47 +21,46 @@ float features[EI_INPUT_SIZE];
 
 i2s_chan_handle_t rx_handle = NULL;
 
-// ===== FILTER STATE =====
-float prev_input = 0;
-float prev_output_hp = 0;
-float prev_output_lp = 0;
-float envelope = 0;
+// ================= BUTTON =================
+#define BUTTON_PIN 1
+bool recording = false;
+unsigned long recordStart = 0;
 
-// tuning
-float alpha_hp = 0.95;
-float alpha_lp = 0.1;
-float env_alpha = 0.9;
+// ================= BLE =================
+BLECharacteristic *pCharacteristic;
 
-// ===== SMOOTHING =====
+// ================= FILTER =================
+float prev_input = 0, prev_output_hp = 0, prev_output_lp = 0, envelope = 0;
+float alpha_hp = 0.95, alpha_lp = 0.1, env_alpha = 0.9;
+
+// ================= SMOOTH =================
 float smoothed_scores[EI_CLASSIFIER_LABEL_COUNT] = {0};
 float alpha = 0.7;
 
-// ===== SIGNAL =====
+// ================= RESULT TRACK =================
+float best_score = 0;
+String best_label = "None";
+
+// ================= SIGNAL =================
 static int get_signal_data(size_t offset, size_t length, float *out_ptr) {
   memcpy(out_ptr, features + offset, length * sizeof(float));
   return 0;
 }
 
-// ===== FILTER FUNCTION =====
+// ================= FILTER FUNCTION =================
 float process_sample(float x) {
-
-  // DC removal
   static float dc = 0;
   dc = 0.999 * dc + 0.001 * x;
-  x = x - dc;
+  x -= dc;
 
-  // High-pass
   float hp = alpha_hp * (prev_output_hp + x - prev_input);
   prev_input = x;
   prev_output_hp = hp;
 
-  // Low-pass
   float lp = prev_output_lp + alpha_lp * (hp - prev_output_lp);
   prev_output_lp = lp;
 
-  // Envelope
   envelope = env_alpha * envelope + (1 - env_alpha) * abs(lp);
-
   return envelope;
 }
 
@@ -64,9 +68,27 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  Serial.println("FINAL AI SYSTEM START");
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
 
-  // ===== I2S INIT =====
+  Serial.println("AI STETHOSCOPE READY");
+
+  // ===== BLE =====
+  BLEDevice::init("VITALIS");
+
+  BLEServer *pServer = BLEDevice::createServer();
+  BLEService *pService = pServer->createService("FFE0");
+
+  pCharacteristic = pService->createCharacteristic(
+                      "FFE1",
+                      BLECharacteristic::PROPERTY_NOTIFY
+                    );
+
+  pCharacteristic->addDescriptor(new BLE2902());
+
+  pService->start();
+  BLEDevice::getAdvertising()->start();
+
+  // ===== I2S =====
   i2s_chan_config_t chan_cfg =
       I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
   i2s_new_channel(&chan_cfg, NULL, &rx_handle);
@@ -90,8 +112,24 @@ void setup() {
 
 void loop() {
 
-  size_t bytes_read = 0;
+  // ===== BUTTON PRESS START =====
+  if (digitalRead(BUTTON_PIN) == LOW && !recording) {
+    recording = true;
+    recordStart = millis();
 
+    best_score = 0;
+    best_label = "None";
+
+    memset(smoothed_scores, 0, sizeof(smoothed_scores));
+
+    Serial.println("Recording Started");
+    delay(300); // debounce
+  }
+
+  if (!recording) return;
+
+  // ===== AUDIO READ =====
+  size_t bytes_read = 0;
   i2s_channel_read(rx_handle, i2s_buffer, sizeof(i2s_buffer),
                    &bytes_read, 10);
 
@@ -102,9 +140,7 @@ void loop() {
           (EI_INPUT_SIZE - samples) * sizeof(float));
 
   for (int i = 0; i < samples && i < EI_INPUT_SIZE; i++) {
-    int32_t raw = i2s_buffer[i] >> 14;
-    float filtered = process_sample((float)raw);
-
+    float filtered = process_sample((float)(i2s_buffer[i] >> 14));
     features[EI_INPUT_SIZE - samples + i] = filtered;
   }
 
@@ -114,21 +150,15 @@ void loop() {
   signal.get_data = &get_signal_data;
 
   ei_impulse_result_t result = {0};
-  EI_IMPULSE_ERROR res = run_classifier(&signal, &result, false);
+  run_classifier(&signal, &result, false);
 
-  if (res != EI_IMPULSE_OK) {
-    Serial.println("Inference error");
-    return;
-  }
-
-  // ===== SMOOTHING =====
+  // ===== SMOOTH =====
   for (size_t i = 0; i < EI_CLASSIFIER_LABEL_COUNT; i++) {
     smoothed_scores[i] =
         alpha * smoothed_scores[i] +
         (1 - alpha) * result.classification[i].value;
   }
 
-  // ===== FIND BEST =====
   float max_val = 0;
   const char* label = "Uncertain";
 
@@ -139,16 +169,35 @@ void loop() {
     }
   }
 
-  // ===== THRESHOLD =====
-  if (max_val < 0.6) {
-    label = "Uncertain";
+  if (max_val < 0.6) label = "Uncertain";
+
+  // ===== TRACK BEST =====
+  if (max_val > best_score) {
+    best_score = max_val;
+    best_label = label;
   }
 
-  // ===== OUTPUT =====
-  Serial.print("Prediction: ");
+  Serial.print("Live: ");
   Serial.print(label);
-  Serial.print(" | Confidence: ");
-  Serial.println(max_val, 3);
+  Serial.print(" ");
+  Serial.println(max_val, 2);
 
-  delay(50);
+  // ===== STOP AFTER 8 SEC =====
+  if (millis() - recordStart > 8000) {
+
+    recording = false;
+
+    Serial.println("Recording Finished");
+
+String msg = "FINAL:" + String(best_label) + "," + String(best_score, 3);
+Serial.println(msg);   // DEBUG
+pCharacteristic->setValue(msg.c_str());
+pCharacteristic->notify();
+
+    Serial.print("Sent: ");
+    Serial.println(msg);
+    
+  }
+
+  delay(40);
 }
