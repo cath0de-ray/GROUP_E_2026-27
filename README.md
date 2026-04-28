@@ -45,11 +45,6 @@ This project is purpose-built to address the "Last Mile" healthcare gap, activel
 ### 2. SDG 9: Industry, Innovation, and Infrastructure
 * **The Problem:** Commercial digital stethoscopes are prohibitively expensive
 * **The VITALIS Solution:** Utilizes "Edge Computing" via neural networks to provide diagnostic infrastructure with zero INTERNET dependency.
-
-### 3. SDG 10: Reduced Inequalities
-* **The Problem:** Severe disparity in diagnostic quality between urban hospitals and rural clinics.
-* **The VITALIS Solution:** Democratizes medical technology by upgrading standard analog equipment into digital diagnostic nodes using affordable MEMS microphones.
-
 ---
 
 ## ⚙️ System Architecture & Workflow
